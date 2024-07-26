@@ -6,8 +6,11 @@ AEV-PLIG is a GNN-based scoring function that predicts the binding affinity of a
 - [Demo](#demo)
 
 ## Installation guide
+AEV-PLIG has been tested on the following systems:
++ macOS: Monterey (12.5.1)
 
 ### Create conda environment
+Installation times may vary, but took around 30 seconds on Mac M1.
 For *macOS*:
 ```
 conda env create --file aev-plig-mac.yml
@@ -30,7 +33,7 @@ pip install pandas
 ```
 
 ## Demo
-This section demonstrates how to train your own AEV-PLIG model, how to use AEV-PLIG to make predictions, and finally, how to do enriched training with your own data.
+This section demonstrates how to train your own AEV-PLIG model, and how to use AEV-PLIG to make predictions.
 
 The computational requirements for each script are included, and unless otherwise specified, the hardware used is a Mac M1 CPU.
 
@@ -92,3 +95,5 @@ The script processes data in *dataset_csv*, and removes datapoints if:
 The script then creates graphs and pytorch data to run the AEV-PLIG model specified with *trained_model_name*. The default is AEV-PLIG trained on PDBbind v2020 but we recommend using AEV-PLIG trained with PDBbind v2020 and BindingNet.
 
 The predictions are saved under *output/predictions/data_name_predictions.csv*
+
+For the example dataset, the script takes around 20 seconds to run
