@@ -12,21 +12,21 @@ def init_weights(layer):
             torch.nn.init.zeros_(layer.bias)
 
 class GraphDataset(InMemoryDataset):
-    def __init__(self, root='data', dataset_name=None,
+    def __init__(self, root='data', dataset=None,
                  ids=None, y=None, graphs_dict=None, y_scaler=None):
 
         super(GraphDataset, self).__init__(root)
-        self.dataset_name = dataset_name
+        self.dataset = dataset
         if os.path.isfile(self.processed_paths[0]):
             #self.data, self.slices = torch.load(self.processed_paths[0])
-            self.load(self.processed_paths[0])
+            self.load(self.processed_paths[0], weights_only=True)
             print("processed paths:")
             print(self.processed_paths[0])
 
         else:
             self.process(ids, y, graphs_dict)
             #self.data, self.slices = torch.load(self.processed_paths[0])
-            self.load(self.processed_paths[0])
+            self.load(self.processed_paths[0], weights_only=True)
         
         if y_scaler is None:
             y_scaler = StandardScaler()
@@ -41,7 +41,7 @@ class GraphDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return [self.dataset_name + '.pt']
+        return [self.dataset + '.pt']
 
     def download(self):
         pass

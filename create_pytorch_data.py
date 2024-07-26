@@ -50,10 +50,10 @@ test_ids, test_y = list(df['unique_id']), list(df['pK'])
 
 # make data PyTorch Geometric ready
 print('preparing ', dataset + '_train.pt in pytorch format!')
-train_data = GraphDataset(root='data', dataset_name=dataset + '_train', ids=train_ids, y=train_y, graphs_dict=graphs_dict)
+train_data = GraphDataset(root='data', dataset=dataset + '_train', ids=train_ids, y=train_y, graphs_dict=graphs_dict)
 
 print('preparing ', dataset + '_valid.pt in pytorch format!')
-valid_data = GraphDataset(root='data', dataset_name=dataset + '_valid', ids=valid_ids, y=valid_y, graphs_dict=graphs_dict)
+valid_data = GraphDataset(root='data', dataset=dataset + '_valid', ids=valid_ids, y=valid_y, graphs_dict=graphs_dict)
 
 print('preparing ', dataset + '_test.pt in pytorch format!')
-test_data = GraphDataset(root='data', dataset_name=dataset + '_test', ids=test_ids, y=test_y, graphs_dict=graphs_dict)
+test_data = GraphDataset(root='data', dataset=dataset + '_test', ids=test_ids, y=test_y, graphs_dict=graphs_dict)
