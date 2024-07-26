@@ -1,4 +1,6 @@
 import os
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 import numpy as np
 from torch_geometric.data import InMemoryDataset, Data
 import torch
@@ -17,16 +19,18 @@ class GraphDataset(InMemoryDataset):
 
         super(GraphDataset, self).__init__(root)
         self.dataset = dataset
+        #torch.serialization.add_safe_globals([GraphDataset])
+        torch.serialization.add_safe_globals([Data])
         if os.path.isfile(self.processed_paths[0]):
             #self.data, self.slices = torch.load(self.processed_paths[0])
-            self.load(self.processed_paths[0], weights_only=True)
+            self.load(self.processed_paths[0])
             print("processed paths:")
             print(self.processed_paths[0])
 
         else:
             self.process(ids, y, graphs_dict)
             #self.data, self.slices = torch.load(self.processed_paths[0])
-            self.load(self.processed_paths[0], weights_only=True)
+            self.load(self.processed_paths[0])
         
         if y_scaler is None:
             y_scaler = StandardScaler()

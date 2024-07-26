@@ -170,7 +170,6 @@ if __name__ == "__main__":
     
     args = parse_args()
     
-    torch.serialization.add_safe_globals([GraphDataset])   
     train_NN(args)
     
     print("Total time is %s seconds" % (time.time() - start_time))
