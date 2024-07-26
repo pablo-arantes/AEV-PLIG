@@ -116,7 +116,6 @@ def train_NN(args):
         valid_loader = DataLoader(valid_data, batch_size=batch_size, shuffle=False)
         test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
-        # training the model
         if(torch.cuda.is_available()):
             print("GPU is available")
             device = torch.device("cuda")
@@ -149,12 +148,10 @@ def train_NN(args):
     
     df_test['preds'] = df_test.iloc[:,1:].mean(axis=1)
 
-    # Save scaler
-    scaler_file = 'output/trained_models/' + dataset + '_scaler.pickle'
+    scaler_file = timestr + '_model_' + model_st + '_' + dataset + '.pickle'
     with open(scaler_file,'wb') as f:
         pickle.dump(train_data.y_scaler, f)
     
-    # print test results
     test_preds = np.array(df_test['preds'])
     test_truth = np.array(df_test['truth'])
     test_ens_pc = pearson(test_truth, test_preds)
@@ -164,7 +161,6 @@ def train_NN(args):
 
 
 
-# entry point
 if __name__ == "__main__":
     start_time = time.time()
     

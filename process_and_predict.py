@@ -260,242 +260,267 @@ def predict(model, device, loader, y_scaler=None):
     return y_scaler.inverse_transform(total_labels.numpy().flatten().reshape(-1,1)).flatten(), y_scaler.inverse_transform(total_preds.detach().numpy().flatten().reshape(-1,1)).flatten()
 
 
-"""
-Load data
-"""
+def process_data(config):
 
-df = pd.read_csv("data/dataset.csv", index_col=0)
+    """
+    Load data
+    """
 
-"""
-Check what molecules are readible by RDKit, and which contain rare atoms
-"""
-print("Checking what molecules are readible by RDKit, and which contain rare atoms\n")
-allowed_elements = set(['F', 'N', 'Cl', 'O', 'Br', 'C', 'B', 'P', 'I', 'S'])
-non_readable = []
-rare_atoms_ids = []
-for index, row in tqdm(df.iterrows()):
-    suppl = Chem.SDMolSupplier(row["sdf_file"], removeHs=False)
-    assert(len(suppl) == 1)
-    lig = suppl[0]
-    if lig is None:
-        non_readable.append(row["unique_id"])
-    else:
-        mol_df = LoadMolasDF(lig)
-        if not set(mol_df["ATOM_TYPE"].values).issubset(allowed_elements):
-            rare_atoms_ids.append(row["unique_id"])
+    df = pd.read_csv(config.dataset_csv)
 
-print("Number of sdf files not read by RDkit:",len(non_readable))
-print("Number of sdf files with rare elements:",len(rare_atoms_ids))
-df = df[~df["unique_id"].isin(rare_atoms_ids)].reset_index(drop=True)
-df = df[~df["unique_id"].isin(non_readable)].reset_index(drop=True)
-print("\n")
+    """
+    Check what molecules are readible by RDKit, and which contain rare atoms
+    """
+    print("Checking what molecules are readible by RDKit, and which contain rare atoms\n")
+    allowed_elements = set(['F', 'N', 'Cl', 'O', 'Br', 'C', 'B', 'P', 'I', 'S'])
+    non_readable = []
+    rare_atoms_ids = []
+    for index, row in tqdm(df.iterrows()):
+        suppl = Chem.SDMolSupplier(row["sdf_file"], removeHs=False)
+        assert(len(suppl) == 1)
+        lig = suppl[0]
+        if lig is None:
+            non_readable.append(row["unique_id"])
+        else:
+            mol_df = LoadMolasDF(lig)
+            if not set(mol_df["ATOM_TYPE"].values).issubset(allowed_elements):
+                rare_atoms_ids.append(row["unique_id"])
 
-"""
-Check what protein structures are readible by Biopandas
-"""
-print("Checking what protein structures are readible by Biopandas\n")
-atom_keys = pd.read_csv("data/PDB_Atom_Keys.csv", sep=",")
-atom_keys["RESIDUE"] = atom_keys["PDB_ATOM"].apply(lambda x: x.split("-")[0])
-non_readable = []
-for index, row in tqdm(df.iterrows()):
-    try:
-        LoadPDBasDF(row["pdb_file"], atom_keys)
-    except:
-        non_readable.append(row["unique_id"])
+    print("Number of sdf files not read by RDkit:",len(non_readable))
+    print("Number of sdf files with rare elements:",len(rare_atoms_ids))
+    df = df[~df["unique_id"].isin(rare_atoms_ids)].reset_index(drop=True)
+    df = df[~df["unique_id"].isin(non_readable)].reset_index(drop=True)
+    print("\n")
 
-print("Number of pdb files not read by Biopandas:",len(non_readable))
-df = df[~df["unique_id"].isin(non_readable)].reset_index(drop=True)
-print("\n")
+    """
+    Check what protein structures are readible by Biopandas
+    """
+    print("Checking what protein structures are readible by Biopandas\n")
+    atom_keys = pd.read_csv("data/PDB_Atom_Keys.csv", sep=",")
+    atom_keys["RESIDUE"] = atom_keys["PDB_ATOM"].apply(lambda x: x.split("-")[0])
+    non_readable = []
+    for index, row in tqdm(df.iterrows()):
+        try:
+            LoadPDBasDF(row["pdb_file"], atom_keys)
+        except:
+            non_readable.append(row["unique_id"])
 
-"""
-Analyse atom features
-"""
-print("Analyse atom features\n")
-features = []
-for index, row in tqdm(df.iterrows()):
-    suppl = Chem.SDMolSupplier(row["sdf_file"], removeHs=False)
-    lig = suppl[0]
-    for atom in lig.GetAtoms():
-        if atom.GetSymbol() != "H":
-            feature = []
-            feature.append(atom.GetSymbol())
-            feature.append(len([x.GetSymbol() for x in atom.GetNeighbors() if x.GetSymbol() != "H"]))
-            feature.append(len([x.GetSymbol() for x in atom.GetNeighbors() if x.GetSymbol() == "H"]))
-            feature.append(atom.GetExplicitValence())                
-            if atom.GetIsAromatic():
-                feature.append(1)
-            else:
-                feature.append(0)
-            if atom.IsInRing():
-                feature.append(1)
-            else:
-                feature.append(0)
+    print("Number of pdb files not read by Biopandas:",len(non_readable))
+    df = df[~df["unique_id"].isin(non_readable)].reset_index(drop=True)
+    print("\n")
+
+    """
+    Analyse atom features
+    """
+    print("Analyse atom features\n")
+    features = []
+    for index, row in tqdm(df.iterrows()):
+        suppl = Chem.SDMolSupplier(row["sdf_file"], removeHs=False)
+        lig = suppl[0]
+        for atom in lig.GetAtoms():
+            if atom.GetSymbol() != "H":
+                feature = []
+                feature.append(atom.GetSymbol())
+                feature.append(len([x.GetSymbol() for x in atom.GetNeighbors() if x.GetSymbol() != "H"]))
+                feature.append(len([x.GetSymbol() for x in atom.GetNeighbors() if x.GetSymbol() == "H"]))
+                feature.append(atom.GetExplicitValence())                
+                if atom.GetIsAromatic():
+                    feature.append(1)
+                else:
+                    feature.append(0)
+                if atom.IsInRing():
+                    feature.append(1)
+                else:
+                    feature.append(0)
+            
+            features.append(feature)
+
+    features = pd.DataFrame(features, columns=["atom_symbol",
+                                                "num_heavy_atoms",
+                                                "total_num_Hs",
+                                                "explicit_valence",
+                                                "is_aromatic",
+                                                "is_in_ring"])
+
+    print(features["atom_symbol"].value_counts())
+    print(features["num_heavy_atoms"].value_counts())
+    print(features["total_num_Hs"].value_counts())
+    print(features["explicit_valence"].value_counts())
+    print(features["is_aromatic"].value_counts())
+    print(features["is_in_ring"].value_counts())
+    print("\n")
+
+    """
+    Edge analysis
+    """
+    print("Edge analysis\n")
+    bond_types = []
+    unspecified_bond_mol = []
+    for index, row in tqdm(df.iterrows()):
+        suppl = Chem.SDMolSupplier(row["sdf_file"], removeHs=False)
+        lig = suppl[0]
+
+        heavy_atom_index = []
+        idx_to_idx = {}
+        counter = 0
+        for atom in lig.GetAtoms():
+            if atom.GetSymbol() != "H": # Include only non-hydrogen atoms
+                idx_to_idx[atom.GetIdx()] = counter
+                heavy_atom_index.append(atom.GetIdx())
+                counter += 1
         
-        features.append(feature)
+        conf = lig.GetConformer()
+        for bond in lig.GetBonds():
+            idx1 = bond.GetBeginAtomIdx()
+            idx2 = bond.GetEndAtomIdx()
+            if idx1 in heavy_atom_index and idx2 in heavy_atom_index:
+                bond_types.append(bond.GetBondType())
+                if bond.GetBondType() == 0:
+                    unspecified_bond_mol.append(row["unique_id"])
 
-features = pd.DataFrame(features, columns=["atom_symbol",
-                                            "num_heavy_atoms",
-                                            "total_num_Hs",
-                                            "explicit_valence",
-                                            "is_aromatic",
-                                            "is_in_ring"])
+    features = pd.DataFrame(data={"bond_type":bond_types})
+    print(features["bond_type"].value_counts())
 
-print(features["atom_symbol"].value_counts())
-print(features["num_heavy_atoms"].value_counts())
-print(features["total_num_Hs"].value_counts())
-print(features["explicit_valence"].value_counts())
-print(features["is_aromatic"].value_counts())
-print(features["is_in_ring"].value_counts())
-print("\n")
+    print("Number of molecules with unspecified bond types:",len(unspecified_bond_mol))
+    df = df[~df["unique_id"].isin(unspecified_bond_mol)].reset_index(drop=True)
+    print("\n")
 
-"""
-Edge analysis
-"""
-print("Edge analysis\n")
-bond_types = []
-unspecified_bond_mol = []
-for index, row in tqdm(df.iterrows()):
-    suppl = Chem.SDMolSupplier(row["sdf_file"], removeHs=False)
-    lig = suppl[0]
+    # save the processed dataset
+    new_dataset_csv = config.dataset_csv.split(".")[0] + "_processed.csv"
+    print("Saving processed dataset as {}\n".format(new_dataset_csv))
+    df.to_csv(new_dataset_csv, index=False)
+    print("\n")
 
-    heavy_atom_index = []
-    idx_to_idx = {}
-    counter = 0
-    for atom in lig.GetAtoms():
-        if atom.GetSymbol() != "H": # Include only non-hydrogen atoms
-            idx_to_idx[atom.GetIdx()] = counter
-            heavy_atom_index.append(atom.GetIdx())
-            counter += 1
+def generate_graphs(config):
+
+    """
+    Generate for all complexes: ANI-2x with 22 atom types. Only 2-atom interactions.
+    """
+    new_dataset_csv = config.dataset_csv.split(".")[0] + "_processed.csv"
+    df = pd.read_csv(new_dataset_csv)
+    atom_keys = pd.read_csv("data/PDB_Atom_Keys.csv", sep=",")
+
+    print("Generating graphs\n")
+
+    t = time.time()
+
+    atom_map = pd.DataFrame(pd.unique(atom_keys["ATOM_TYPE"]))
+    atom_map[1] = list(np.arange(len(atom_map)) + 1)
+    atom_map = atom_map.rename(columns={0:"ATOM_TYPE", 1:"ATOM_NR"})
+
+    # Radial coefficients: ANI-2x
+    RcR = 5.1 # Radial cutoff
+    EtaR = torch.tensor([19.7]) # Radial decay
+    RsR = torch.tensor([0.80, 1.07, 1.34, 1.61, 1.88, 2.14, 2.41, 2.68, 
+                        2.95, 3.22, 3.49, 3.76, 4.03, 4.29, 4.56, 4.83]) # Radial shift
+    radial_coefs = [RcR, EtaR, RsR]
+
+    mol_graphs = {}
+    for index, row in tqdm(df.iterrows()):
+        suppl = Chem.SDMolSupplier(row["sdf_file"], removeHs=False)
+        lig = suppl[0]
+
+        protein_path = row["pdb_file"]
+
+        mol_df, aevs = GetMolAEVs_extended(protein_path, lig, atom_keys, radial_coefs, atom_map)
+        graph = mol_to_graph(lig, mol_df, aevs)
+        mol_graphs[row["unique_id"]] = graph
+
+    #save the graphs to use as input for the GNN models
+    output_file_graphs = "data/" + config.data_name + "_graphs.pickle"
+    with open(output_file_graphs, 'wb') as handle:
+        pickle.dump(mol_graphs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+    t2 = time.time()
+    print("Time to generate graphs:", t2-t)
+
+
+def make_predictions(config):
+    """
+    Define model_name and load scaler
+    """
+    print("Make predictions\n")
+
+    model_name = config.trained_model_name
     
-    conf = lig.GetConformer()
-    for bond in lig.GetBonds():
-        idx1 = bond.GetBeginAtomIdx()
-        idx2 = bond.GetEndAtomIdx()
-        if idx1 in heavy_atom_index and idx2 in heavy_atom_index:
-            bond_types.append(bond.GetBondType())
-            if bond.GetBondType() == 0:
-                unspecified_bond_mol.append(row["unique_id"])
 
-features = pd.DataFrame(data={"bond_type":bond_types})
-print(features["bond_type"].value_counts())
+    with open('output/trained_models/' + model_name + '.pickle','rb') as f:
+        scaler = pickle.load(f)
 
-print("Number of molecules with unspecified bond types:",len(unspecified_bond_mol))
-df = df[~df["unique_id"].isin(unspecified_bond_mol)].reset_index(drop=True)
-print("\n")
+    """
+    Create .pt file from graphs
+    """
+    new_dataset_csv = config.dataset_csv.split(".")[0] + "_processed.csv"
 
-# save the processed dataset
-print("Saving processed dataset\n")
-df.to_csv("data/dataset_processed.csv")
-print("\n")
+    data = pd.read_csv(new_dataset_csv)
 
-"""
-Generate for all complexes: ANI-2x with 22 atom types. Only 2-atom interactions.
-"""
-#df = pd.read_csv("data/dataset_processed.csv", index_col=0)
-#atom_keys = pd.read_csv("data/PDB_Atom_Keys.csv", sep=",")
+    with open("data/" + config.data_name + "_graphs.pickle", 'rb') as handle:
+        graphs_dict = pickle.load(handle)
 
-print("Generating graphs\n")
+    test_ids = list(data["unique_id"])
+    test_y = list(data["pK"])
+    test_data = GraphDataset(root='data', dataset=config.data_name, ids=test_ids, y=test_y, graphs_dict=graphs_dict, y_scaler=scaler)
 
-t = time.time()
+    """
+    Make predictions
+    """
 
-atom_map = pd.DataFrame(pd.unique(atom_keys["ATOM_TYPE"]))
-atom_map[1] = list(np.arange(len(atom_map)) + 1)
-atom_map = atom_map.rename(columns={0:"ATOM_TYPE", 1:"ATOM_NR"})
+    test_loader = DataLoader(test_data, batch_size=300, shuffle=False)
 
-# Radial coefficients: ANI-2x
-RcR = 5.1 # Radial cutoff
-EtaR = torch.tensor([19.7]) # Radial decay
-RsR = torch.tensor([0.80, 1.07, 1.34, 1.61, 1.88, 2.14, 2.41, 2.68, 
-                    2.95, 3.22, 3.49, 3.76, 4.03, 4.29, 4.56, 4.83]) # Radial shift
-radial_coefs = [RcR, EtaR, RsR]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--hidden_dim', type=int, default=256)
+    parser.add_argument('--head', type=int, default=3)
+    parser.add_argument('--activation_function', type=str, default='leaky_relu')
+    args = parser.parse_args()
 
-mol_graphs = {}
-for index, row in tqdm(df.iterrows()):
-    suppl = Chem.SDMolSupplier(row["sdf_file"], removeHs=False)
-    lig = suppl[0]
+    modeling = model_dict['GATv2Net']
+    model = modeling(node_feature_dim=test_data.num_node_features, edge_feature_dim=test_data.num_edge_features, config=args)
 
-    protein_path = row["pdb_file"]
+    for i in range(10):
+        model_path = 'output/trained_models/' + config.trained_model_name + '_' + str(i) + '.model'
+        model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
 
-    mol_df, aevs = GetMolAEVs_extended(protein_path, lig, atom_keys, radial_coefs, atom_map)
-    graph = mol_to_graph(lig, mol_df, aevs)
-    mol_graphs[row["unique_id"]] = graph
+        G_test, P_test = predict(model, torch.device('cpu'), test_loader, test_data.y_scaler)
 
-#save the graphs to use as input for the GNN models
-output_file_graphs = "data/graphs.pickle"
-with open(output_file_graphs, 'wb') as handle:
-    pickle.dump(mol_graphs, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        if(i == 0):
+            df_test = pd.DataFrame(data=G_test, index=range(len(G_test)), columns=['truth'])
 
+        col = 'preds_' + str(i)
+        df_test[col] = P_test
 
-t2 = time.time()
-print("Time to generate graphs:", t2-t)
+    df_test['preds'] = df_test.iloc[:,1:].mean(axis=1)
 
-"""
-Define model_name and load scaler
-"""
-print("Make predictions\n")
+    df_test['unique_id'] = data['unique_id']
 
-model_name = "20240423-200034_model_GATv2Net_pdbbind_U_bindingnet_ligsim90_"
+    data = data.merge(df_test, on='unique_id', how='left')
 
-with open('data/models/scaler.pickle','rb') as f:
-    scaler = pickle.load(f)
+    assert(np.allclose(data['pK'], data['truth'], rtol=1e-03))
+
+    """
+    Save predictions
+    """
+    print("Saving predictions\n")
+    data.to_csv("output/predictions/" + config.data_name + "_predictions.csv", index=False)
 
 
-"""
-Create .pt file from graphs
-"""
-os.system('rm data/processed/pytorch_data.pt')
-
-data = pd.read_csv("data/dataset_processed.csv", index_col=0)
-
-# run below only once
-with open('data/graphs.pickle', 'rb') as handle:
-    graphs_dict = pickle.load(handle)
-
-test_ids = list(data["unique_id"])
-test_y = list(data["pK"])
-test_data = GraphDataset(root='data', dataset='pytorch_data', ids=test_ids, y=test_y, graphs_dict=graphs_dict, y_scaler=scaler)
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--trained_model_name', type=str, default='20231116-181233_model_GATv2Net_pdbbind_core')
+    parser.add_argument('--dataset_csv', type=str, default='data/example_dataset.csv')
+    parser.add_argument('--data_name', type=str, default='example')
+    args = parser.parse_args()
+    return args
 
 
-"""
-Make predictions
-"""
-
-test_loader = DataLoader(test_data, batch_size=300, shuffle=False)
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--hidden_dim', type=int, default=256)
-parser.add_argument('--head', type=int, default=3)
-parser.add_argument('--activation_function', type=str, default='leaky_relu')
-config = parser.parse_args()
-
-modeling = model_dict['GATv2Net']
-model = modeling(node_feature_dim=test_data.num_node_features, edge_feature_dim=test_data.num_edge_features, config=config)
-
-for i in range(10):
-    model_path = 'data/models/' + model_name + str(i) + '.model'
-    model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
-
-    G_test, P_test = predict(model, torch.device('cpu'), test_loader, test_data.y_scaler)
-
-    if(i == 0):
-        df_test = pd.DataFrame(data=G_test, index=range(len(G_test)), columns=['truth'])
-
-    col = 'preds_' + str(i)
-    df_test[col] = P_test
-
-df_test['preds'] = df_test.iloc[:,1:].mean(axis=1)
-
-df_test['unique_id'] = data['unique_id']
-
-data = data.merge(df_test, on='unique_id', how='left')
-
-assert(np.allclose(data['pK'], data['truth'], rtol=1e-03))
-
-print("Time to make predictions:", time.time()-t2)
-print("Total time:", time.time()-t)
-"""
-Save predictions
-"""
-print("Saving predictions\n")
-data.to_csv("output/predictions/predictions.csv")
+if __name__ == "__main__":    
+    config = parse_args()
+    
+    process_data(config)
+    t1 = time.time()
+    generate_graphs(config)
+    print("Time to generate graphs:", time.time()-t1)
+    make_predictions(config)
+    print("Total time to generate graphs and make predictions is %s seconds" % (time.time() - t1))
+    
 
