@@ -7,8 +7,6 @@ import qcelemental as qcel
 import numpy as np
 from tqdm import tqdm
 from rdkit import Chem
-from biopandas.pdb import PandasPdb
-
 
 def elements_to_atomicnums(elements):
     atomicnums = np.zeros(len(elements), dtype=int)
@@ -40,7 +38,7 @@ def LoadMolasDF(mol):
     return df
 
 
-def LoadPDBasDF_old(PDB, atom_keys):
+def LoadPDBasDF(PDB, atom_keys):
     prot_atoms = []
     
     f = open(PDB)
@@ -62,34 +60,9 @@ def LoadPDBasDF_old(PDB, atom_keys):
     return df
 
 
-def LoadPDBasDF(pdb_path, atom_keys):
-    allowed_residues = atom_keys["RESIDUE"].unique()
-    ppdb = PandasPdb().read_pdb(pdb_path)
-    protein = ppdb.df['ATOM']
-    protein = protein[~protein["atom_name"].str.startswith("H")]
-    protein = protein[~protein["atom_name"].str.startswith(tuple(map(str, range(10))))]
-
-    disgard = protein[~protein["residue_name"].isin(allowed_residues)]
-    if len(disgard) > 0:
-        print("WARNING: Protein contains unsupported residues.", pdb_path)
-        print("Ignoring following residues:")
-        print(disgard["residue_name"].unique())
-
-    protein = protein[protein["residue_name"].isin(allowed_residues)]
-    protein["PDB_ATOM"] = protein["residue_name"] + "-" + protein["atom_name"]
-    protein = protein[['atom_number','PDB_ATOM','x_coord','y_coord','z_coord']].rename(columns={"atom_number":"ATOM_INDEX", "x_coord":"X", "y_coord":"Y", "z_coord":"Z"})
-    protein = protein.merge(atom_keys, how='left', on='PDB_ATOM').sort_values(by="ATOM_INDEX").reset_index(drop=True)
-
-    if list(protein["ATOM_TYPE"].isna()).count(True) > 0:
-        print("WARNING: Protein contains unsupported atom types.", pdb_path)
-        print("Ignoring following atom types:")
-        print(protein[protein["ATOM_TYPE"].isna()]["PDB_ATOM"].unique())
-    return protein
-
-
 def GetMolAEVs_extended(protein_path, mol, atom_keys, radial_coefs, atom_map):
     # Protein and ligand structure are loaded as pandas DataFrame
-    Target = LoadPDBasDF_old(protein_path, atom_keys)
+    Target = LoadPDBasDF(protein_path, atom_keys)
     Ligand = LoadMolasDF(mol)
     
     # Define AEV coeficients

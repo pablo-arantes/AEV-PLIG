@@ -13,7 +13,7 @@ print("loading graph from pickle file for BindingNet")
 with open("data/bindingnet.pickle", 'rb') as handle:
     bindingnet_graphs = pickle.load(handle)
 
-print("loading graph from pickle file for Schrodinger")
+print("loading graph from pickle file for enrichment data")
 with open("data/graphs.pickle", 'rb') as handle:
     local_graphs = pickle.load(handle)
 
