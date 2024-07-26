@@ -460,6 +460,8 @@ def make_predictions(config):
 
     test_ids = list(data["unique_id"])
     test_y = list(data["pK"])
+    if os.path.exists("data/processed/" + config.data_name + ".pt"):
+        os.remove("data/processed/" + config.data_name + ".pt")
     test_data = GraphDataset(root='data', dataset=config.data_name, ids=test_ids, y=test_y, graphs_dict=graphs_dict, y_scaler=scaler)
 
     """
@@ -468,14 +470,8 @@ def make_predictions(config):
 
     test_loader = DataLoader(test_data, batch_size=300, shuffle=False)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--hidden_dim', type=int, default=256)
-    parser.add_argument('--head', type=int, default=3)
-    parser.add_argument('--activation_function', type=str, default='leaky_relu')
-    args = parser.parse_args()
-
     modeling = model_dict['GATv2Net']
-    model = modeling(node_feature_dim=test_data.num_node_features, edge_feature_dim=test_data.num_edge_features, config=args)
+    model = modeling(node_feature_dim=test_data.num_node_features, edge_feature_dim=test_data.num_edge_features, config=config)
 
     for i in range(10):
         model_path = 'output/trained_models/' + config.trained_model_name + '_' + str(i) + '.model'
@@ -509,6 +505,9 @@ def parse_args():
     parser.add_argument('--trained_model_name', type=str, default='20231116-181233_model_GATv2Net_pdbbind_core')
     parser.add_argument('--dataset_csv', type=str, default='data/example_dataset.csv')
     parser.add_argument('--data_name', type=str, default='example')
+    parser.add_argument('--hidden_dim', type=int, default=256)
+    parser.add_argument('--head', type=int, default=3)
+    parser.add_argument('--activation_function', type=str, default='leaky_relu')
     args = parser.parse_args()
     return args
 
