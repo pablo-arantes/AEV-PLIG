@@ -78,7 +78,6 @@ The trained models are saved in *output/trained_models*
 ### Predictions
 In order to make predictions, the model requires a *.csv* file with the following columns:
 - *unique_id*, unique identifier for the datapoint
-- *pK*, binding affinity label in pk units
 - *sdf_file*, relative path to the ligand *.sdf* file
 - *pdb_file*, relative path to the protein *.pdb* file
 
