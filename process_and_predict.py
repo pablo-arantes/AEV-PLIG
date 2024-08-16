@@ -9,7 +9,7 @@ from tqdm import tqdm
 from rdkit import Chem
 from biopandas.pdb import PandasPdb
 import os
-from utils import GraphDataset
+from utils import GraphDatasetPredict
 from torch_geometric.loader import DataLoader
 from helpers import model_dict
 import argparse
@@ -248,16 +248,16 @@ def mol_to_graph(mol, mol_df, aevs, extra_features=["atom_symbol",
 def predict(model, device, loader, y_scaler=None):
     model.eval()
     total_preds = torch.Tensor()
-    total_labels = torch.Tensor()
+    total_graph_ids = torch.IntTensor()
     print('Make prediction for {} samples...'.format(len(loader.dataset)))
     with torch.no_grad():
         for data in loader:
             data = data.to(device)
             output = model(data)
             total_preds = torch.cat((total_preds, output.cpu()), 0)
-            total_labels = torch.cat((total_labels, data.y.view(-1, 1).cpu()), 0)
+            total_graph_ids = torch.cat((total_graph_ids, data.y.view(-1, 1).cpu()), 0)
 
-    return y_scaler.inverse_transform(total_labels.numpy().flatten().reshape(-1,1)).flatten(), y_scaler.inverse_transform(total_preds.detach().numpy().flatten().reshape(-1,1)).flatten()
+    return total_graph_ids.numpy().flatten(), y_scaler.inverse_transform(total_preds.detach().numpy().flatten().reshape(-1,1)).flatten()
 
 
 def process_data(config):
@@ -458,17 +458,18 @@ def make_predictions(config):
     with open("data/" + config.data_name + "_graphs.pickle", 'rb') as handle:
         graphs_dict = pickle.load(handle)
 
+    data["graph_id"] = range(len(data))
     test_ids = list(data["unique_id"])
-    test_y = list(data["pK"])
+    test_graph_ids = list(data["graph_id"])
     if os.path.exists("data/processed/" + config.data_name + ".pt"):
         os.remove("data/processed/" + config.data_name + ".pt")
-    test_data = GraphDataset(root='data', dataset=config.data_name, ids=test_ids, y=test_y, graphs_dict=graphs_dict, y_scaler=scaler)
+    test_data = GraphDatasetPredict(root='data', dataset=config.data_name, ids=test_ids, graph_ids=test_graph_ids, graphs_dict=graphs_dict)
 
     """
     Make predictions
     """
 
-    test_loader = DataLoader(test_data, batch_size=300, shuffle=False)
+    test_loader = DataLoader(test_data, batch_size=len(data), shuffle=False)
 
     modeling = model_dict['GATv2Net']
     model = modeling(node_feature_dim=test_data.num_node_features, edge_feature_dim=test_data.num_edge_features, config=config)
@@ -477,21 +478,17 @@ def make_predictions(config):
         model_path = 'output/trained_models/' + config.trained_model_name + '_' + str(i) + '.model'
         model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
 
-        G_test, P_test = predict(model, torch.device('cpu'), test_loader, test_data.y_scaler)
+        graph_ids_test, P_test = predict(model, torch.device('cpu'), test_loader, scaler)
 
         if(i == 0):
-            df_test = pd.DataFrame(data=G_test, index=range(len(G_test)), columns=['truth'])
+            df_test = pd.DataFrame(data=graph_ids_test, index=range(len(graph_ids_test)), columns=['graph_id'])
 
         col = 'preds_' + str(i)
         df_test[col] = P_test
 
     df_test['preds'] = df_test.iloc[:,1:].mean(axis=1)
 
-    df_test['unique_id'] = data['unique_id']
-
-    data = data.merge(df_test, on='unique_id', how='left')
-
-    assert(np.allclose(data['pK'], data['truth'], rtol=1e-03))
+    data = data.merge(df_test, on='graph_id', how='left')
 
     """
     Save predictions
