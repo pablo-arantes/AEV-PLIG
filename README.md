@@ -99,7 +99,7 @@ The script processes data in *dataset_csv*, and removes datapoints if:
 2. Molecule contains rare element
 3. Molecule has undefined bond type
 
-The script then creates graphs and pytorch data to run the AEV-PLIG model specified with *trained_model_name*. The default is AEV-PLIG trained on PDBbind v2020 but we recommend using AEV-PLIG trained with PDBbind v2020 and BindingNet.
+The script then creates graphs and pytorch data to run the AEV-PLIG model specified with *trained_model_name*.
 
 The predictions are saved under *output/predictions/data_name_predictions.csv*
 
