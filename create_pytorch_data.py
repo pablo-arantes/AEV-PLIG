@@ -13,31 +13,39 @@ print("loading graph from pickle file for BindingNet")
 with open("data/bindingnet.pickle", 'rb') as handle:
     bindingnet_graphs = pickle.load(handle)
 
-graphs_dict = {**pdbbind_graphs, **bindingnet_graphs}
+print("loading graph from pickle file for BindingDB")
+with open("data/bindingdb.pickle", 'rb') as handle:
+    bindingdb_graphs = pickle.load(handle)
+
+graphs_dict = {**pdbbind_graphs, **bindingnet_graphs, **bindingdb_graphs}
+
 
 """
-Generate data for enriched training for <0.9 Tanimoto to Schrodinger/Merck
+Generate data for enriched training for <0.9 Tanimoto to the FEP benchmark
 """
 pdbbind = pd.read_csv("data/pdbbind_processed.csv", index_col=0)
-pdbbind = pdbbind[['PDB_code','-logKd/Ki','split_core','max_tanimoto_schrodinger','max_tanimoto_merck']]
+pdbbind = pdbbind[['PDB_code','-logKd/Ki','split_core','max_tanimoto_fep_benchmark']]
 pdbbind = pdbbind.rename(columns={'PDB_code':'unique_id', 'split_core':'split', '-logKd/Ki':'pK'})
-pdbbind = pdbbind[pdbbind['max_tanimoto_schrodinger'] < 0.9]
-pdbbind = pdbbind[pdbbind['max_tanimoto_merck'] < 0.9]
+pdbbind = pdbbind[pdbbind["max_tanimoto_fep_benchmark"] < 0.9]
 pdbbind = pdbbind[['unique_id','pK','split']]
 
 bindingnet = pd.read_csv("data/bindingnet_processed.csv", index_col=0)
-bindingnet = bindingnet.rename(columns={'-logAffi': 'pK','unique_identify':'unique_id'})[['unique_id','pK','max_tanimoto_schrodinger','max_tanimoto_merck']]
+bindingnet = bindingnet.rename(columns={'-logAffi': 'pK','unique_identify':'unique_id'})[['unique_id','pK','max_tanimoto_fep_benchmark']]
 bindingnet['split'] = 'train'
-bindingnet = bindingnet[bindingnet['max_tanimoto_schrodinger'] < 0.9]
-bindingnet = bindingnet[bindingnet['max_tanimoto_merck'] < 0.9]
+bindingnet = bindingnet[bindingnet["max_tanimoto_fep_benchmark"] < 0.9]
 bindingnet = bindingnet[['unique_id','pK','split']]
 
-# combine pdbbind2020 and bindingnet index sets
-data = pd.concat([pdbbind, bindingnet], ignore_index=True)
+bindingdb = pd.read_csv("data/bindingdb_processed.csv", index_col=0)
+bindingdb = bindingdb[['unique_id','pK','max_tanimoto_fep_benchmark']]
+bindingdb['split'] = 'train'
+bindingdb = bindingdb[bindingdb["max_tanimoto_fep_benchmark"] < 0.9]
+bindingdb = bindingdb[['unique_id','pK','split']]
+
+# combine pdbbind2020, bindingnet, and bindingdb index sets
+data = pd.concat([pdbbind, bindingnet, bindingdb], ignore_index=True)
 print(data[['split']].value_counts())
 
-
-dataset = 'pdbbind_U_bindingnet_ligsim90'
+dataset = 'pdbbind_U_bindingnet_U_bindingdb_ligsim90_fep_benchmark'
 
 df = data[data['split'] == 'train']
 train_ids, train_y = list(df['unique_id']), list(df['pK'])

@@ -212,28 +212,11 @@ def mol_to_graph(mol, mol_df, aevs, extra_features=["atom_symbol",
     return len(mol_df), features, edge_index, edge_attr
 
 
-def predict(model, device, loader, y_scaler=None):
-    model.eval()
-    total_preds = torch.Tensor()
-    total_labels = torch.Tensor()
-    print('Make prediction for {} samples...'.format(len(loader.dataset)))
-    with torch.no_grad():
-        for data in loader:
-            data = data.to(device)
-            output = model(data)
-            total_preds = torch.cat((total_preds, output.cpu()), 0)
-            total_labels = torch.cat((total_labels, data.y.view(-1, 1).cpu()), 0)
-
-    return y_scaler.inverse_transform(total_labels.numpy().flatten().reshape(-1,1)).flatten(), y_scaler.inverse_transform(total_preds.detach().numpy().flatten().reshape(-1,1)).flatten()
-
-
 """
 Load data
 """
-
 df = pd.read_csv("data/bindingnet_processed.csv", index_col=0)
 folder =  "data/bindingnet/from_chembl_client/"
-
 
 """
 Generate for all complexes: ANI-2x with 22 atom types. Only 2-atom interactions.

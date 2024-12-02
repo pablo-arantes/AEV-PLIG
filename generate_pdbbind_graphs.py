@@ -11,19 +11,6 @@ from rdkit import Chem
 
 
 def elements_to_atomicnums(elements):
-    """
-    Convert element symbols to atomic numbers.
-
-    Parameters
-    ----------
-    elements: Iterable
-        Iterable object with lement symbols
-
-    Returns
-    -------
-    np.ndarray
-        Array of atomic numbers
-    """
     atomicnums = np.zeros(len(elements), dtype=int)
 
     for idx, e in enumerate(elements):
@@ -33,9 +20,6 @@ def elements_to_atomicnums(elements):
 
 
 def LoadMolasDF(mol):
-# This function converts the input ligand (.MOL file) into a pandas DataFrame with the ligand atom position in 3D (X,Y,Z)
-    
-    # load the ligand 
     m = mol
 
     atoms = []
@@ -57,8 +41,6 @@ def LoadMolasDF(mol):
 
 
 def LoadPDBasDF(PDB, atom_keys):
-# This function converts a protein PDB file into a pandas DataFrame with the protein atom position in 3D (X,Y,Z)
-
     prot_atoms = []
     
     f = open(PDB)
@@ -83,29 +65,6 @@ def LoadPDBasDF(PDB, atom_keys):
 
 
 def GetMolAEVs_extended(protein_path, mol, atom_keys, radial_coefs, atom_map):
-    """
-    Calculate AEVs for molecule atoms based on protein atoms in a complex.
-    Hydrogens in both the molecule and protein are ignored and behind the
-    curtains molecule atoms are encoded as carbon to use torchani_mod code.
-    
-    Parameters
-    ----------
-    protein_path: string, path to protein file (.pdb)
-    mol_path: string, path to molecule file (.mol2)
-    atom_keys: dataframe of atom types in proteins
-    radial_coefs: list of pytorch tensors of RcR, EtaR, RsR
-    angular_coefs: list of pytorch tensors of RcA, Zeta, TsA, EtaA, RsA
-
-    Returns
-    -------
-    Tensor of shape [1, A, L], where A is the number of atoms and L is the 
-    appropriate length of AEV.
-    
-    Todo
-    ----
-    Assert that RcR > RcA
-    """
-    
     # Protein and ligand structure are loaded as pandas DataFrame
     Target = LoadPDBasDF(protein_path, atom_keys)
     Ligand = LoadMolasDF(mol)
@@ -165,98 +124,7 @@ def GetMolAEVs_extended(protein_path, mol, atom_keys, radial_coefs, atom_map):
     return Ligand, aev.aevs.squeeze(0)[:mol_len,indices]
 
 
-def GetMolAEVs_rad(protein_path, mol, atom_keys, radial_coefs):
-    """
-    Calculate AEVs for molecule atoms based on protein atoms in a complex.
-    Hydrogens in both the molecule and protein are ignored and behind the
-    curtains molecule atoms are encoded as carbon to use torchani_mod code.
-    
-    Parameters
-    ----------
-    protein_path: string, path to protein file (.pdb)
-    mol_path: string, path to molecule file (.mol2)
-    atom_keys: dataframe of atom types in proteins
-    radial_coefs: list of pytorch tensors of RcR, EtaR, RsR
-    angular_coefs: list of pytorch tensors of RcA, Zeta, TsA, EtaA, RsA
-
-    Returns
-    -------
-    Tensor of shape [1, A, L], where A is the number of atoms and L is the 
-    appropriate length of AEV.
-    
-    Todo
-    ----
-    Assert that RcR > RcA
-    """
-    
-    # Protein and ligand structure are loaded as pandas DataFrame
-    Target = LoadPDBasDF(protein_path, atom_keys)
-    Ligand = LoadMolasDF(mol)
-    
-    # Define AEV coeficients
-    # Radial coefficients
-    RcR = radial_coefs[0]
-    EtaR = radial_coefs[1]
-    RsR = radial_coefs[2]
-    
-    # Angular coefficients (Ga)
-    RcA = 2.0
-    Zeta = torch.tensor([1.0])
-    TsA = torch.tensor([1.0]) # Angular shift in GA
-    EtaA = torch.tensor([1.0])
-    RsA = torch.tensor([1.0])  # Radial shift in GA
-    
-    # Reduce size of Target df to what we need based on radial cutoff RcR
-    distance_cutoff = RcR + 0.1
-    
-    for i in ["X","Y","Z"]:
-        Target = Target[Target[i] < float(Ligand[i].max())+distance_cutoff]
-        Target = Target[Target[i] > float(Ligand[i].min())-distance_cutoff]
-    
-    # Instead of all these different atom types we only use atom symbol
-    Target["ATOM_SYMBOL"] = [i.split(";")[0] for i in Target["ATOM_TYPE"]]
-    
-    # Create tensors of atomic numbers and coordinates of molecule atoms and 
-    # protein atoms combined. Encode molecule atoms as hydrogen
-    mol_len = torch.tensor(len(Ligand))
-    atomicnums = np.append(np.ones(mol_len)*6, elements_to_atomicnums(Target['ATOM_SYMBOL']))
-    atomicnums = torch.tensor(atomicnums, dtype=torch.int64)
-    atomicnums = atomicnums.unsqueeze(0)
-    
-    coordinates = pd.concat([Ligand[['X','Y','Z']], Target[['X','Y','Z']]])
-    coordinates = torch.tensor(coordinates.values)
-    coordinates = coordinates.unsqueeze(0)
-    
-    # Use torchani_mod to calculate AEVs
-    atom_symbols = ['C','N','O','S']
-    AEVC = torchani_mod.AEVComputer(RcR, RcA, EtaR, RsR, 
-                                EtaA, Zeta, RsA, TsA, len(atom_symbols))
-    
-    SC = torchani.SpeciesConverter(atom_symbols)
-    sc = SC((atomicnums, coordinates))
-    
-    aev = AEVC.forward((sc.species, sc.coordinates), mol_len)
-
-    # find indices of columns to keep
-    # keep all radial terms
-    n = len(atom_symbols)
-    n_rad_sub = len(EtaR)*len(RsR)
-    indices = list(np.arange(n*n_rad_sub))
-    
-    return Ligand, aev.aevs.squeeze(0)[:mol_len,indices]
-
-
 def one_of_k_encoding(x, allowable_set):
-    """
-    taken from https://github.com/thinng/GraphDTA
-
-    function which one hot encodes x w.r.t. allowable_set and x has to be in allowable_set
-
-    x:
-        element from allowable_set
-    allowable_set: list
-        list of elements x is from
-    """
     if x not in allowable_set:
         raise Exception("input {0} not in allowable set{1}:".format(x, allowable_set))
     return list(map(lambda s: x == s, allowable_set))
