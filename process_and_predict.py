@@ -247,17 +247,18 @@ def mol_to_graph(mol, mol_df, aevs, extra_features=["atom_symbol",
 
 def predict(model, device, loader, y_scaler=None):
     model.eval()
-    total_preds = torch.Tensor()
-    total_graph_ids = torch.IntTensor()
+    model.to(device)
+    total_preds = torch.Tensor().to(device)
+    total_graph_ids = torch.IntTensor().to(device)
     print('Make prediction for {} samples...'.format(len(loader.dataset)))
     with torch.no_grad():
         for data in loader:
             data = data.to(device)
             output = model(data)
-            total_preds = torch.cat((total_preds, output.cpu()), 0)
-            total_graph_ids = torch.cat((total_graph_ids, data.y.view(-1, 1).cpu()), 0)
+            total_preds = torch.cat((total_preds, output), 0)
+            total_graph_ids = torch.cat((total_graph_ids, data.y.view(-1, 1)), 0)
 
-    return total_graph_ids.numpy().flatten(), y_scaler.inverse_transform(total_preds.detach().numpy().flatten().reshape(-1,1)).flatten()
+    return total_graph_ids.cpu().numpy().flatten(), y_scaler.inverse_transform(total_preds.cpu().detach().numpy().flatten().reshape(-1,1)).flatten()
 
 
 def process_data(config):
@@ -296,7 +297,7 @@ def process_data(config):
     Check what protein structures are readible by Biopandas
     """
     print("Checking what protein structures are readible by Biopandas\n")
-    atom_keys = pd.read_csv("data/PDB_Atom_Keys.csv", sep=",")
+    atom_keys = pd.read_csv("/content/AEV-PLIG/data/PDB_Atom_Keys.csv", sep=",")
     atom_keys["RESIDUE"] = atom_keys["PDB_ATOM"].apply(lambda x: x.split("-")[0])
     non_readable = []
     for index, row in tqdm(df.iterrows()):
@@ -398,7 +399,7 @@ def generate_graphs(config):
     """
     new_dataset_csv = config.dataset_csv.split(".")[0] + "_processed.csv"
     df = pd.read_csv(new_dataset_csv)
-    atom_keys = pd.read_csv("data/PDB_Atom_Keys.csv", sep=",")
+    atom_keys = pd.read_csv("/content/AEV-PLIG/data/PDB_Atom_Keys.csv", sep=",")
 
     print("Generating graphs\n")
 
@@ -427,7 +428,7 @@ def generate_graphs(config):
         mol_graphs[row["unique_id"]] = graph
 
     #save the graphs to use as input for the GNN models
-    output_file_graphs = "data/" + config.data_name + "_graphs.pickle"
+    output_file_graphs = "/content/AEV-PLIG/data/" + config.data_name + "_graphs.pickle"
     with open(output_file_graphs, 'wb') as handle:
         pickle.dump(mol_graphs, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -445,7 +446,7 @@ def make_predictions(config):
     model_name = config.trained_model_name
     
 
-    with open('output/trained_models/' + model_name + '.pickle','rb') as f:
+    with open('/content/AEV-PLIG/output/trained_models/' + model_name + '.pickle','rb') as f:
         scaler = pickle.load(f)
 
     """
@@ -455,14 +456,14 @@ def make_predictions(config):
 
     data = pd.read_csv(new_dataset_csv)
 
-    with open("data/" + config.data_name + "_graphs.pickle", 'rb') as handle:
+    with open("/content/AEV-PLIG/data/" + config.data_name + "_graphs.pickle", 'rb') as handle:
         graphs_dict = pickle.load(handle)
 
     data["graph_id"] = range(len(data))
     test_ids = list(data["unique_id"])
     test_graph_ids = list(data["graph_id"])
-    if os.path.exists("data/processed/" + config.data_name + ".pt"):
-        os.remove("data/processed/" + config.data_name + ".pt")
+    if os.path.exists("/content/AEV-PLIG/data/processed/" + config.data_name + ".pt"):
+        os.remove("/content/AEV-PLIG/data/processed/" + config.data_name + ".pt")
     test_data = GraphDatasetPredict(root='data', dataset=config.data_name, ids=test_ids, graph_ids=test_graph_ids, graphs_dict=graphs_dict)
 
     """
@@ -474,11 +475,16 @@ def make_predictions(config):
     modeling = model_dict['GATv2Net']
     model = modeling(node_feature_dim=test_data.num_node_features, edge_feature_dim=test_data.num_edge_features, config=config)
 
-    for i in range(10):
-        model_path = 'output/trained_models/' + config.trained_model_name + '_' + str(i) + '.model'
-        model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        graph_ids_test, P_test = predict(model, torch.device('cpu'), test_loader, scaler)
+    print(f"Using device: {device}")
+
+
+    for i in range(10):
+        model_path = '/content/AEV-PLIG/output/trained_models/' + config.trained_model_name + '_' + str(i) + '.model'
+        model.load_state_dict(torch.load(model_path, map_location=device))
+
+        graph_ids_test, P_test = predict(model, device, test_loader, scaler)
 
         if(i == 0):
             df_test = pd.DataFrame(data=graph_ids_test, index=range(len(graph_ids_test)), columns=['graph_id'])
@@ -494,13 +500,13 @@ def make_predictions(config):
     Save predictions
     """
     print("Saving predictions\n")
-    data.to_csv("output/predictions/" + config.data_name + "_predictions.csv", index=False)
+    data.to_csv("/content/AEV-PLIG/output/predictions/" + config.data_name + "_predictions.csv", index=False)
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--trained_model_name', type=str, default='20231116-181233_model_GATv2Net_pdbbind_core')
-    parser.add_argument('--dataset_csv', type=str, default='data/example_dataset.csv')
+    parser.add_argument('--dataset_csv', type=str, default='/content/AEV-PLIG/data/example_dataset.csv')
     parser.add_argument('--data_name', type=str, default='example')
     parser.add_argument('--hidden_dim', type=int, default=256)
     parser.add_argument('--head', type=int, default=3)
@@ -518,5 +524,3 @@ if __name__ == "__main__":
     print("Time to generate graphs:", time.time()-t1)
     make_predictions(config)
     print("Total time to generate graphs and make predictions is %s seconds" % (time.time() - t1))
-    
-
